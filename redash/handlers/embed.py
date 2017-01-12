@@ -2,7 +2,6 @@ import json
 import logging
 import time
 
-import pystache
 from authentication import current_org
 from flask import current_app, render_template, request, safe_join, send_file
 from flask_login import current_user, login_required
@@ -12,10 +11,9 @@ from redash import models, serializers, settings, utils
 from redash.handlers import routes
 from redash.handlers.base import (get_object_or_404, org_scoped_rule,
                                   record_event)
-from redash.handlers.query_results import collect_query_parameters
 from redash.permissions import require_access, view_only
 from redash.utils import (collect_parameters_from_request, gen_query_hash,
-                          json_dumps)
+                          json_dumps, QueryTemplate)
 
 
 #
@@ -25,13 +23,7 @@ from redash.utils import (collect_parameters_from_request, gen_query_hash,
 #             on the client side. Please don't reuse in other API handlers.
 #
 def run_query_sync(data_source, parameter_values, query_text, max_age=0):
-    query_parameters = set(collect_query_parameters(query_text))
-    missing_params = set(query_parameters) - set(parameter_values.keys())
-    if missing_params:
-        raise Exception('Missing parameter value for: {}'.format(", ".join(missing_params)))
-
-    if query_parameters:
-        query_text = pystache.render(query_text, parameter_values)
+    query_text = QueryTemplate(query_text).render(parameter_values)
 
     if max_age <= 0:
         query_result = None

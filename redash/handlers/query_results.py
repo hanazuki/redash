@@ -3,7 +3,6 @@ import json
 import cStringIO
 import time
 
-import pystache
 from flask import make_response, request
 from flask_login import current_user
 from flask_restful import abort
@@ -12,7 +11,7 @@ from redash import models, settings, utils
 from redash.tasks import QueryTask, record_event
 from redash.permissions import require_permission, not_view_only, has_access, require_access, view_only
 from redash.handlers.base import BaseResource, get_object_or_404
-from redash.utils import collect_query_parameters, collect_parameters_from_request
+from redash.utils import collect_parameters_from_request, QueryTemplate
 from redash.tasks.queries import enqueue_query
 
 
@@ -21,10 +20,10 @@ def error_response(message):
 
 
 def run_query(data_source, parameter_values, query_text, query_id, max_age=0):
-    query_parameters = set(collect_query_parameters(query_text))
-    missing_params = set(query_parameters) - set(parameter_values.keys())
-    if missing_params:
-        return error_response('Missing parameter value for: {}'.format(", ".join(missing_params)))
+    try:
+        query_text = QueryTemplate(query_text).render(parameter_values)
+    except QueryTemplate.ParameterValuesMissing as e:
+        return error_response(e.message)
 
     if data_source.paused:
         if data_source.pause_reason:
@@ -33,9 +32,6 @@ def run_query(data_source, parameter_values, query_text, query_id, max_age=0):
             message = '{} is paused. Please try later.'.format(data_source.name)
 
         return error_response(message)
-
-    if query_parameters:
-        query_text = pystache.render(query_text, parameter_values)
 
     if max_age == 0:
         query_result = None
